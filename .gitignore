@@ -1,0 +1,17 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / IDE
+.cursor/
+.vscode/
+*.swp
+*.swo
+
+# Optional local assets (uncomment if you don't want screenshots in repo)
+# assets/

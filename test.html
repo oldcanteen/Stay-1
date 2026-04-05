@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ChatGPT Wait Games — local test</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 640px;
+        margin: 24px auto;
+        padding: 0 16px;
+        color: #27272a;
+      }
+      .note {
+        background: #f4f4f5;
+        border: 1px solid #e4e4e7;
+        border-radius: 8px;
+        padding: 12px 14px;
+        font-size: 14px;
+        margin-bottom: 20px;
+        line-height: 1.5;
+      }
+      .note code {
+        background: #e4e4e7;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 13px;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+        font-size: 14px;
+      }
+      .composer-row {
+        display: flex;
+        gap: 10px;
+        align-items: flex-end;
+        margin-bottom: 16px;
+      }
+      .composer-row #composer {
+        flex: 1;
+        margin-bottom: 0;
+      }
+      #composer {
+        width: 100%;
+        min-height: 80px;
+        padding: 10px;
+        border: 1px solid #d4d4d8;
+        border-radius: 8px;
+        font-size: 15px;
+      }
+      #btn-send {
+        padding: 10px 18px;
+        border-radius: 8px;
+        border: 1px solid #d4d4d8;
+        background: #27272a;
+        color: #fff;
+        font-size: 14px;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      #fake-stop-wrap {
+        margin: 16px 0;
+        padding: 12px;
+        background: #fafafa;
+        border: 1px dashed #a1a1aa;
+        border-radius: 8px;
+      }
+      #fake-stop-wrap p {
+        margin: 0 0 8px;
+        font-size: 13px;
+        color: #52525b;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      #btn-stop {
+        padding: 8px 14px;
+        border-radius: 8px;
+        border: 1px solid #d4d4d8;
+        background: #fff;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .helper {
+        font-size: 13px;
+        color: #71717a;
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Extension local test</h1>
+    <div class="note">
+      <strong>How to run</strong><br />
+      From the folder that contains this file, start a local server, for example:<br />
+      <code>python -m http.server 8765</code><br />
+      Then open <code>http://127.0.0.1:8765/test.html</code><br />
+      Reload the unpacked extension in <code>chrome://extensions</code> after changing
+      <code>manifest.json</code>. In DevTools → Console, filter for <code>[CWG]</code> to see
+      load / timer / popup logs.
+    </div>
+
+    <label for="composer">Fake chat composer</label>
+    <div class="composer-row">
+      <textarea id="composer" placeholder="Type something, then Enter or Send…"></textarea>
+      <button type="button" id="btn-send" aria-label="Send prompt">Send</button>
+    </div>
+
+    <div id="fake-stop-wrap">
+      <p>Fake “still generating” control (extension looks for a Stop button):</p>
+      <div class="row">
+        <button type="button" id="btn-stop" aria-label="Stop generating">Stop generating</button>
+        <button type="button" id="btn-done">Simulate answer done</button>
+        <button type="button" id="btn-reset-stop">Show Stop again</button>
+      </div>
+    </div>
+
+    <p class="helper">
+      Expected: after 5s (with <strong>Stop generating</strong> visible), a black circular
+      <strong>FAB</strong> appears. Tap it → chip with <strong>Surprise me</strong> and
+      <strong>×</strong>. <strong>Surprise me</strong> opens the game panel and shrinks this page
+      (padding). <strong>Minimize</strong> returns to the FAB.
+    </p>
+
+    <script>
+      (function () {
+        var row = document.querySelector('#fake-stop-wrap .row');
+        document.getElementById('btn-done').addEventListener('click', function () {
+          var s = document.getElementById('btn-stop');
+          if (s && s.parentNode) s.remove();
+        });
+        document.getElementById('btn-reset-stop').addEventListener('click', function () {
+          if (document.getElementById('btn-stop')) return;
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.id = 'btn-stop';
+          b.setAttribute('aria-label', 'Stop generating');
+          b.textContent = 'Stop generating';
+          row.insertBefore(b, row.firstChild);
+        });
+      })();
+    </script>
+  </body>
+</html>
