@@ -3,7 +3,7 @@
   "name": "STAY",
   "version": "1.0.0",
   "description": "Companion panel with mini-games while ChatGPT responds.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "clipboardWrite", "clipboardRead"],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -22,10 +22,12 @@
       "matches": [
         "https://chatgpt.com/*",
         "https://*.chatgpt.com/*",
+        "https://gemini.google.com/*",
+        "https://claude.ai/*",
         "http://127.0.0.1/*",
         "http://localhost/*"
       ],
-      "js": ["content.js"],
+      "js": ["notes.js", "game.js", "draw.js", "content.js"],
       "css": ["styles.css"],
       "run_at": "document_idle"
     }
