@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stay</title>
+
+  <!--
+    styles.css        — shared component styles (design tokens, brand bar, tabs, notes, draw, game).
+    sidepanel.css     — overrides for the side-panel context (panel becomes the page).
+  -->
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+
+  <!--
+    Same element IDs as the in-page panel ensured notes.js / game.js / draw.js
+    work without modification.
+  -->
+  <div id="cwg-root">
+    <div id="cwg-panel" class="cwg-pointer cwg-open">
+
+      <!-- ── Header ───────────────────────────────────────────────────── -->
+      <!--
+        NOTE: We intentionally do NOT render a brand bar here.
+        Chrome's native side-panel chrome (browser-rendered, unremovable)
+        already supplies the logo + "Stay" title + pin + close at the top
+        of the panel. Adding our own brand-bar caused duplication.
+        Pin/close semantics are handled by Chrome's built-in controls.
+      -->
+      <div id="cwg-panel-header">
+
+        <!-- Row 1: tabs (now the first row in our custom area) -->
+        <div class="cwg-tab-row">
+          <div class="cwg-tab-bar">
+            <button type="button" class="cwg-tab cwg-tab--active" id="cwg-tab-notes">Notes</button>
+            <button type="button" class="cwg-tab"                 id="cwg-tab-draw">Draw</button>
+            <button type="button" class="cwg-tab"                 id="cwg-tab-game">Play</button>
+          </div>
+        </div>
+
+        <!-- Row 2: per-tab info text (set by sidepanel.js) -->
+        <div id="cwg-info-text" class="cwg-info-text"></div>
+
+        <p id="cwg-panel-title"     hidden>Stay</p>
+        <p id="cwg-panel-scoreline" class="cwg-panel-scoreline" hidden></p>
+      </div>
+      <!-- /header -->
+
+      <!-- ── Answer-ready notification (only shown while Play tab is active) ── -->
+      <div id="cwg-ready-badge" class="cwg-ready-badge-wrap">
+        <div class="cwg-ready-badge-row">
+          <span class="cwg-ready-badge-text">Your answer is ready</span>
+          <button type="button" class="cwg-ready-badge-close" id="cwg-ready-close" aria-label="Dismiss notification">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 6l12 12"/>
+              <path d="M18 6L6 18"/>
+            </svg>
+          </button>
+        </div>
+        <button type="button" class="cwg-ready-take-me-btn" id="cwg-ready-take-me">
+          Take me to my answer
+        </button>
+      </div>
+
+      <!-- ── Tab content (rendered by notes.js / draw.js / game.js) ─── -->
+      <div id="cwg-panel-body"></div>
+
+      <!--
+        Persistent footer action bar — mirrors the toolbar at the top.
+        Each tab's render function populates this with the tab's CTAs:
+          notes : [Copy] [Share ▾]
+          draw  : [Select artwork] [Download]
+          play  : (hidden)
+      -->
+      <div id="cwg-panel-footer" class="cwg-panel-footer cwg-panel-footer--hidden"></div>
+
+    </div>
+  </div>
+
+  <!--
+    Load order matters:
+      1. notes.js     — adds S.renderNotesTab, S.setupNotesDropZone
+      2. game.js      — adds S.renderColorGame
+      3. draw.js      — adds S.renderDrawTab
+      4. sidepanel.js — defines namespace base + bootstraps
+  -->
+  <script src="notes.js"></script>
+  <script src="game.js"></script>
+  <script src="draw.js"></script>
+  <script src="sidepanel.js"></script>
+
+</body>
+</html>

@@ -1,11 +1,79 @@
-/* LLM companion panel — scoped under #cwg-root; page squeeze via html/body classes */
+/* Stay panel UI — loaded inside Shadow DOM (#stay-extension-host) and inside
+ * the side-panel page (sidepanel.html). Does not style the host webpage. */
+
+@import url('https://rsms.me/inter/inter.css');
+
+/* ── Design tokens ────────────────────────────────────────────────────────── */
+:root,
+#cwg-root {
+  /* ── Primary palette (coral) ─────────────────────────────────────── */
+  --stay-coral:        #ff6b5b;
+  --stay-coral-hover:  #ff5a47;
+  --stay-coral-press:  #e84e3c;
+  --stay-coral-soft:   #ffe7e3;
+  --stay-coral-tint:   rgba(255, 107, 91, 0.12);
+
+  /* ── Neutrals (ink + surfaces) ───────────────────────────────────── */
+  --stay-ink-1:        #18181b;   /* primary text */
+  --stay-ink-2:        #3f3f46;   /* secondary text */
+  --stay-ink-3:        #71717a;   /* tertiary / info */
+  --stay-ink-4:        #a1a1aa;   /* muted */
+
+  /* Strokes (light-grey, per design system spec) */
+  --stay-stroke:       #e0e0e0;   /* default 1px strokes (component borders) */
+  --stay-stroke-soft:  #eeeeee;   /* hairline separators */
+  --stay-stroke-bold:  #c8c8cc;   /* hover / focus rings */
+  /* Legacy aliases — older rules still reference these */
+  --stay-line:         var(--stay-stroke-soft);
+  --stay-line-strong:  var(--stay-stroke);
+
+  /* Surfaces */
+  --stay-bg:           #ffffff;
+  --stay-bg-soft:      #fafafa;
+  --stay-bg-muted:     #f4f4f6;
+
+  /* Spacing (4-pt scale) */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Radii */
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+  --radius-pill: 999px;
+
+  /* Typography */
+  --stay-font: 'Inter', 'Inter var', -apple-system, BlinkMacSystemFont,
+               'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 14px;
+  --fs-xl: 16px;
+
+  /* Icon sizing (matches hugeicons stroked style: 24×24 viewBox, 1.5px stroke) */
+  --icon-sm: 16px;
+  --icon-md: 18px;
+  --icon-lg: 20px;
+  --stroke-w: 1.6;
+
+  /* Elevation */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 1px rgba(0, 0, 0, 0.03);
+  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
 
 #cwg-root {
   all: initial;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  font-size: 14px;
+  font-family: var(--stay-font);
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  font-size: var(--fs-lg);
   line-height: 1.45;
-  color: #3f3f46;
+  color: var(--stay-ink-2);
   z-index: 2147483646;
   pointer-events: none;
 }
@@ -18,252 +86,145 @@
   pointer-events: auto;
 }
 
-/* Dock fixed 60 px from the bottom-right of the viewport */
-#cwg-dock {
+/* ── Floating edge bookmark (persistent scroll-edge trigger) ──────────────────
+ *
+ * Default  — coral circle sits half-hidden against the viewport's right edge,
+ *            so only the left half (a half-circle bulge) is visible.
+ * Hover    — the whole trigger shifts fully into view, revealing a full circle.
+ *            The flower rotates while hovering.
+ * Loading  — (class .cwg-edge--waiting) the flower rotates to signal activity.
+ * Idle     — no motion.
+ */
+#cwg-edge-trigger {
   position: fixed;
-  right: var(--cwg-dock-right, 18px);
-  bottom: 45px;
-  z-index: 2147483646;
-  display: none;
+  /* Half-circle by default: the right half sits off-screen. */
+  right: -20px;
+  top: 50%;
+  z-index: 2147483645;
+  display: flex;
   flex-direction: column;
   align-items: flex-end;
-  justify-content: flex-end;
-  gap: 10px;
-  transition:
-    right 0.2s ease;
+  gap: 6px;
+  transform: translateY(-50%);
+  transition: right 220ms cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 0.18s ease,
+              visibility 0.18s ease;
+  pointer-events: auto;
+  will-change: right;
 }
 
-#cwg-dock.cwg-visible {
-  display: flex;
+/* Hover → full circle visible. */
+#cwg-edge-trigger.cwg-edge--hover { right: 0; }
+
+#cwg-edge-trigger.cwg-edge--hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
-#cwg-chip-popup {
-  order: 1;
-  display: none;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 14px;
-  width: min(300px, calc(100vw - 28px));
-  min-width: min(260px, calc(100vw - 28px));
-  max-width: calc(100vw - 24px);
-  min-height: 0;
-  padding: clamp(12px, 3vw, 16px);
-  background: #ffffff;
-  border: 1px solid #e8e8ec;
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
-  transform-origin: bottom right;
+/* Active drag: snap instantly to the pointer, no slide-in animation. */
+#cwg-edge-trigger.cwg-edge--dragging {
+  transition: none;
+  right: 0;
+}
+#cwg-edge-trigger.cwg-edge--dragging #cwg-edge-main { cursor: grabbing; }
+
+@media (prefers-reduced-motion: reduce) {
+  #cwg-edge-trigger { transition-duration: 0.05s; }
 }
 
-#cwg-dock.cwg-expanded #cwg-chip-popup {
-  display: flex;
-}
-
-#cwg-dock.cwg-dock--card-reveal #cwg-chip-popup {
-  animation: cwg-chip-reveal 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes cwg-chip-reveal {
-  from {
-    opacity: 0;
-    transform: scale(0.78) translateY(20px);
-    filter: blur(2px);
-  }
-  55% {
-    filter: blur(0);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-    filter: blur(0);
-  }
-}
-
-.cwg-chip-top-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-}
-
-#cwg-chip-text {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  padding-top: 2px;
-  font-size: clamp(11px, 2.8vw, 13px);
-  line-height: 1.5;
-  color: #4b4b55;
-  text-align: left;
-  word-wrap: break-word;
-  overflow-wrap: anywhere;
-  hyphens: auto;
-}
-
-.cwg-chip-close {
-  flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  margin: 0;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: #8b8b96;
-  cursor: pointer;
+#cwg-edge-main {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.cwg-chip-close:hover {
-  background: #f4f4f5;
-  color: #3f3f46;
-}
-
-.cwg-chip-close-svg {
-  display: block;
-}
-
-#cwg-surprise-btn {
-  width: 100%;
-  box-sizing: border-box;
-  align-self: stretch;
-  background: #2f2f2f;
-  color: #ffffff;
-  border: none;
-  border-radius: 10px;
-  padding: 12px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s ease, transform 0.12s ease, box-shadow 0.2s ease;
-  box-shadow: 0 2px 8px rgba(47, 47, 47, 0.35);
-}
-
-#cwg-surprise-btn:hover {
-  background: #1f1f1f;
-  box-shadow: 0 4px 14px rgba(47, 47, 47, 0.45);
-}
-
-#cwg-surprise-btn:active {
-  transform: scale(0.98);
-}
-
-/* FAB — dark, spins only while .cwg-fab--waiting */
-#cwg-fab {
-  order: 2;
-  position: relative;
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   padding: 0;
+  margin: 0;
   border: none;
   border-radius: 50%;
-  background: linear-gradient(145deg, #484848 0%, #2f2f2f 55%, #1a1a1a 100%);
-  cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.38);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  opacity: 0;
-  transform: scale(0.5);
-  transition:
-    opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-    background 0.18s ease,
-    box-shadow 0.2s ease;
+  background: var(--stay-coral);
+  color: var(--stay-ink-1);
+  cursor: grab;
+  /* Prevent touch-scroll / pinch while dragging the bookmark. */
+  touch-action: none;
+  box-shadow: 0 2px 12px rgba(232, 78, 60, 0.30);
+  transition: background 0.18s ease, box-shadow 0.2s ease, transform 0.15s ease;
 }
 
-#cwg-dock.cwg-visible #cwg-fab {
-  opacity: 1;
-  transform: scale(1);
+#cwg-edge-main:hover  { background: var(--stay-coral-hover); }
+#cwg-edge-main:active { transform: scale(0.97); cursor: grabbing; }
+
+/* Flower rotation: while waiting (loading) AND while hovered. */
+#cwg-edge-trigger.cwg-edge--waiting .cwg-edge-flower-wrap,
+#cwg-edge-trigger.cwg-edge--hover   .cwg-edge-flower-wrap {
+  animation: cwg-edge-flower-spin 2.4s linear infinite;
 }
 
-#cwg-dock.cwg-visible #cwg-fab:hover:not(:active) {
-  transform: scale(1.04);
-  background: linear-gradient(145deg, #555 0%, #333 52%, #1a1a1a 100%);
-  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.48);
+@media (prefers-reduced-motion: reduce) {
+  #cwg-edge-trigger.cwg-edge--waiting .cwg-edge-flower-wrap,
+  #cwg-edge-trigger.cwg-edge--hover   .cwg-edge-flower-wrap { animation: none; }
 }
 
-/* Spin ONLY while loading; stops when class is removed */
-#cwg-fab.cwg-fab--waiting .cwg-fab-flower-wrap {
-  animation: cwg-fab-spin 2.4s linear infinite;
-}
+@keyframes cwg-edge-flower-spin { to { transform: rotate(360deg); } }
 
-#cwg-dock.cwg-visible #cwg-fab:active {
-  transform: scale(0.98);
-  transition-duration: 0.08s;
-  background: linear-gradient(145deg, #222 0%, #111 52%, #000 100%);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
-}
-
-#cwg-dock.cwg-visible #cwg-fab:active .cwg-fab-flower-wrap {
-  animation: none !important;
-}
-
-@keyframes cwg-fab-spin {
-  to { transform: rotate(360deg); }
-}
-
-#cwg-dock.cwg-expanded #cwg-fab {
-  display: none;
-}
-
-.cwg-fab-flower-wrap {
+.cwg-edge-flower-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 0;
+  width: 22px;
+  height: 22px;
 }
 
-.cwg-fab-flower {
-  display: block;
-  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.35));
-}
+.cwg-edge-flower { display: block; width: 22px; height: 22px; }
 
-/* Panel: anchored 60 px from bottom, grows up to top chrome */
+/* Legacy gear button — unused by the reference design. Hide defensively. */
+#cwg-edge-gear { display: none !important; }
+
+/* Panel: fixed right column; with split rail, host page is narrowed first — panel sits in freed space. */
 #cwg-panel {
   position: fixed;
-  top: var(--cwg-panel-top, 8px);
-  bottom: 45px;
+  top: 0;
+  bottom: 0;
   right: 0;
-  width: var(--llm-panel-w, min(360px, 100vw));
-  height: auto;
-  max-height: none;
-  background: #fafafa;
-  border-left: 1px solid #e4e4e7;
-  border-radius: 16px 0 0 16px;
-  box-shadow: -6px 0 32px rgba(0, 0, 0, 0.1);
+  width: var(--llm-panel-w, min(32vw, 100vw));
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  background: #ffffff;
+  border-left: 1px solid #e6e6e9;
+  border-radius: 0;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.08);
   z-index: 2147483646;
-  display: none;
+  display: flex;
   flex-direction: column;
-  pointer-events: auto;
+  transform: translateX(100%);
   transform-origin: right center;
+  visibility: hidden;
+  pointer-events: none;
   overflow: hidden;
   min-height: 0;
   transition:
-    top 0.22s ease;
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0.36s,
+    width 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* Split view: width locked to same --stay-rail-w as page (inherited from extension host); lighter chrome. */
+#cwg-root[data-stay-split] #cwg-panel {
+  width: var(--stay-rail-w, var(--llm-panel-w, min(32vw, 100vw)));
+  box-shadow: none;
 }
 
 #cwg-panel.cwg-open {
-  display: flex;
-}
-
-#cwg-panel.cwg-panel--enter {
-  animation: cwg-panel-reveal 0.44s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
-}
-
-@keyframes cwg-panel-reveal {
-  from {
-    opacity: 0;
-    transform: translateX(12px) scale(0.988);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
+  transform: translateX(0);
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0s,
+    width 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 #cwg-panel--art-waiting {
@@ -279,118 +240,144 @@
   flex-shrink: 0;
 }
 
-/* ── Brand bar ─────────────────────────────────────────────────────────────── */
+/* ── Brand bar (Row 1: logo + name + actions) ─────────────────────────────── */
 .cwg-brand-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: #2f2f2f;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--stay-bg);
+  border-bottom: 1px solid var(--stay-stroke-soft);
+  /* Highest visual layer — nothing appears above it. */
+  position: relative;
+  z-index: 3;
 }
 
 .cwg-brand-logo {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  filter: drop-shadow(0 0 4px rgba(255,255,255,0.25));
+  width: 22px;
+  height: 22px;
+  color: var(--stay-coral);
 }
+
+.cwg-brand-logo svg { width: 22px; height: 22px; display: block; }
 
 .cwg-brand-name {
   flex: 1;
-  font-size: 15px;
-  font-weight: 700;
-  color: #ffffff;
-  letter-spacing: 0.02em;
+  font-family: var(--stay-font);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--stay-ink-1);
 }
 
 .cwg-brand-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   align-items: center;
   flex-shrink: 0;
 }
 
-/* ── Header icon buttons ───────────────────────────────────────────────────── */
+/* ── Header icon buttons (pin / minimize) ─────────────────────────────────── */
 .cwg-header-icon-btn {
   flex-shrink: 0;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   background: transparent;
-  border: 1px solid #d9d9de;
-  border-radius: 6px;
-  color: #71717a;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--stay-ink-3);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .cwg-header-icon-btn:hover {
-  background: #e8e8ec;
-  color: #3f3f46;
-  border-color: #cfcfd6;
+  background: var(--stay-bg-muted);
+  color: var(--stay-ink-1);
 }
 
-.cwg-header-icon-btn--white {
-  border-color: rgba(255, 255, 255, 0.4);
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.08);
+.cwg-header-icon-btn[aria-pressed='true'] {
+  color: var(--stay-coral);
+  background: var(--stay-coral-tint);
 }
 
-.cwg-header-icon-btn--white:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.7);
-  color: #ffffff;
+.cwg-header-icon-btn svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+  display: block;
 }
 
-/* ── Tab row (below brand bar) ─────────────────────────────────────────────── */
+/* legacy modifier kept neutralised */
+.cwg-header-icon-btn--white { color: var(--stay-ink-3); background: transparent; border: none; }
+.cwg-header-icon-btn--white:hover { background: var(--stay-bg-muted); color: var(--stay-ink-1); }
+
+/* ── Tab row (Row 2: notes / draw / play pills) ───────────────────────────── */
 .cwg-tab-row {
-  padding: 6px 10px;
-  background: #f5f5f7;
-  border-bottom: 1px solid #e8e8ec;
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  background: var(--stay-bg);
+  border-bottom: none;
 }
 
 .cwg-tab-bar {
   display: flex;
-  gap: 4px;
+  gap: var(--space-2);
   align-items: center;
 }
 
 .cwg-tab {
-  padding: 5px 14px;
-  border-radius: 7px;
-  border: 1px solid transparent;
-  background: transparent;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: inherit;
-  color: #71717a;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  /* Inactive tab: light background with a 1px light-grey stroke, per design spec. */
+  border: 1px solid var(--stay-stroke);
+  background: var(--stay-bg);
+  font-family: var(--stay-font);
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--stay-ink-2);
   cursor: pointer;
   transition: background 0.13s ease, color 0.13s ease, border-color 0.13s ease;
   white-space: nowrap;
 }
 
 .cwg-tab:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: #3f3f46;
+  background: var(--stay-bg-muted);
+  border-color: var(--stay-stroke-bold);
+  color: var(--stay-ink-1);
 }
 
-.cwg-tab--active {
-  background: #ffffff;
-  color: #3f3f46;
-  border-color: #d9d9de;
+.cwg-tab--active,
+.cwg-tab--active:hover {
+  background: var(--stay-coral);
+  border-color: var(--stay-coral);
+  /* WCAG: dark ink on coral = 7.3:1 (AAA). White on coral = 2.8:1 (fails AA). */
+  color: var(--stay-ink-1);
+  font-weight: 600;
 }
 
-/* Game-mode header color overrides */
-#cwg-panel-header.cwg-panel-header--color .cwg-brand-bar {
-  background: linear-gradient(135deg, #2f2f2f 0%, #111111 100%);
+/* ── Info text row (Row 3: small per-tab description) ─────────────────────── */
+#cwg-info-text,
+.cwg-info-text {
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  background: var(--stay-bg);
+  font-family: var(--stay-font);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--stay-ink-3);
+  border-bottom: 1px solid var(--stay-line);
 }
 
-#cwg-panel-header.cwg-panel-header--color .cwg-tab-row {
-  background: rgba(47, 47, 47, 0.06);
-}
+#cwg-info-text:empty { display: none; }
+
+/* Drop legacy game-mode header color overrides — header stays consistent now */
+#cwg-panel-header.cwg-panel-header--color .cwg-brand-bar { background: var(--stay-bg); }
+#cwg-panel-header.cwg-panel-header--color .cwg-tab-row   { background: var(--stay-bg); }
 
 /* Keep old minimize-btn selector working */
 #cwg-minimize-btn {
@@ -444,36 +431,36 @@
   display: none !important;
 }
 
+/* ── "Your answer is ready" badge — only rendered in the Play tab ─────────── */
 #cwg-ready-badge {
   display: none;
   flex-direction: column;
   align-items: stretch;
-  margin: 0 12px 8px;
-  padding: 10px 8px 10px 14px;
-  gap: 10px;
+  margin: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  gap: var(--space-3);
   flex-shrink: 0;
-  background: #0a0a0a;
-  border: none;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  background: var(--stay-coral-soft);
+  border: 1px solid var(--stay-coral);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
 }
 
-#cwg-ready-badge.cwg-show {
-  display: flex;
-}
+#cwg-ready-badge.cwg-show { display: flex; }
 
 .cwg-ready-badge-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--space-2);
 }
 
 .cwg-ready-badge-text {
   flex: 1;
-  font-size: 13px;
+  font-family: var(--stay-font);
+  font-size: var(--fs-md);
   font-weight: 500;
-  color: #ffffff;
+  color: var(--stay-ink-1);
   line-height: 1.35;
   text-align: left;
   min-width: 0;
@@ -484,45 +471,43 @@
   margin: 0;
   padding: 10px 14px;
   border: none;
-  border-radius: 8px;
-  font-size: 13px;
+  border-radius: var(--radius-md);
+  font-family: var(--stay-font);
+  font-size: var(--fs-md);
   font-weight: 600;
-  font-family: inherit;
   cursor: pointer;
-  background: #f4f4f5;
-  color: #18181b;
+  background: var(--stay-coral);
+  /* WCAG AAA: ink on coral ~7.3:1 */
+  color: var(--stay-ink-1);
   transition: background 0.15s ease, transform 0.1s ease;
 }
 
-.cwg-ready-take-me-btn:hover {
-  background: #ffffff;
-}
-
-.cwg-ready-take-me-btn:active {
-  transform: scale(0.98);
-}
+.cwg-ready-take-me-btn:hover  { background: var(--stay-coral-hover); color: var(--stay-ink-1); }
+.cwg-ready-take-me-btn:active { background: var(--stay-coral-press); color: var(--stay-ink-1); transform: scale(0.99); }
 
 .cwg-ready-badge-close {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   margin: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--stay-ink-3);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .cwg-ready-badge-close:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--stay-ink-1);
 }
+
+.cwg-ready-badge-close svg { width: var(--icon-md); height: var(--icon-md); display: block; }
 
 #cwg-panel-body {
   flex: 1;
@@ -628,16 +613,20 @@
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 
-.cwg-cw-btns button[data-choice="true"]:hover:not(:disabled) {
-  background: #f0fdf4;
-  border-color: #22c55e;
-  color: #15803d;
+/* Neutral hover + pressed states — no green/red tinting. Keeps the page
+ * palette calm; the card itself is already the color reference. */
+.cwg-cw-btns button:hover:not(:disabled) {
+  background: #f4f4f6;
+  border-color: #b8b8c2;
+  color: #18181b;
 }
 
-.cwg-cw-btns button[data-choice="false"]:hover:not(:disabled) {
-  background: #fef2f2;
-  border-color: #ef4444;
-  color: #b91c1c;
+.cwg-cw-btns button:active:not(:disabled),
+.cwg-cw-btns button:focus-visible:not(:disabled) {
+  background: #e7e7ec;
+  border-color: #9a9aa6;
+  color: #18181b;
+  outline: none;
 }
 
 .cwg-cw-btns button:disabled {
@@ -796,78 +785,61 @@
   }
 }
 
-/* Squeeze ChatGPT layout when panel open */
-html.llm-game-squeeze {
-  overflow-x: hidden !important;
+/* ── Page context (injected into panel from host page) ─────────────────────── */
+.cwg-context-bar {
+  flex-shrink: 0;
+  padding: 8px 10px 10px;
+  background: #f4f4f5;
+  border-bottom: 1px solid #e8e8ec;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #52525b;
 }
 
-body.llm-game-open #__next,
-body.llm-game-open main {
-  transition: margin-right 0.25s ease, width 0.25s ease, max-width 0.25s ease;
+.cwg-context-head {
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #71717a;
+  margin-bottom: 6px;
 }
 
-body.llm-game-open main {
-  margin-right: var(--llm-panel-w, 360px) !important;
-  box-sizing: border-box !important;
+.cwg-context-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 6px 8px;
+  align-items: start;
+  margin-top: 4px;
 }
 
-body.llm-game-open #__next {
-  width: calc(100% - var(--llm-panel-w, 360px)) !important;
-  max-width: calc(100% - var(--llm-panel-w, 360px)) !important;
-  margin-right: 0 !important;
-  box-sizing: border-box !important;
+.cwg-context-k {
+  color: #71717a;
+  font-weight: 600;
 }
 
-/*
- * Fixed/sticky top chrome (ChatGPT title bar with Share / ⋯) often uses full viewport width.
- * JS adds .cwg-topchrome-shift to matching nodes inside #__next.
- */
-body.llm-game-open .cwg-topchrome-shift {
-  left: 0 !important;
-  right: var(--llm-panel-w, 360px) !important;
-  width: auto !important;
-  max-width: none !important;
-  box-sizing: border-box !important;
-  transition: right 0.28s ease, width 0.28s ease, max-width 0.28s ease;
-}
-
-/* Forms / composer area often sit in flex rows */
-body.llm-game-open form {
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
-@media (max-width: 520px) {
-  body.llm-game-open #__next {
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  body.llm-game-open main {
-    margin-right: 0 !important;
-  }
-
-  body.llm-game-open .cwg-topchrome-shift {
-    right: 0 !important;
-    width: auto !important;
-    max-width: none !important;
-  }
+.cwg-context-v {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  color: #3f3f46;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
 }
 
 /* ── Notes / Scratchpad Tab ─────────────────────────────────────────────────── */
 
 #cwg-panel-body.cwg-panel-body--notes {
   padding: 0;
-  background: #fafafa;
+  background: var(--stay-bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
 #cwg-panel-body.cwg-panel-body--notes.cwg-drop-active {
-  outline: 2px dashed #2f2f2f;
+  outline: 2px dashed var(--stay-coral);
   outline-offset: -3px;
-  background: #f5f5f5;
+  background: var(--stay-coral-soft);
 }
 
 .cwg-notes-wrap {
@@ -891,35 +863,39 @@ body.llm-game-open form {
   letter-spacing: 0.01em;
 }
 
-/* Persistent drop zone at bottom of block list */
+/* Persistent drop zone — generous vertical space so it reads as the primary
+ * "drop something here" surface, not a tiny strip. */
 .cwg-drop-zone {
   flex-shrink: 0;
-  margin: 4px 8px 6px;
-  border: 1.5px dashed #d0d0d0;
-  border-radius: 10px;
-  padding: 10px 14px;
+  margin: var(--space-3) var(--space-3) var(--space-2);
+  border: 1.5px dashed var(--stay-line-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-5) var(--space-4);
   text-align: center;
   transition: border-color 0.15s ease, background 0.15s ease;
-  min-height: 36px;
+  min-height: 140px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--stay-bg);
 }
 
 .cwg-drop-zone-label {
-  font-size: 11px;
-  color: #aaa;
+  font-family: var(--stay-font);
+  font-size: var(--fs-md);
+  color: var(--stay-ink-3);
   pointer-events: none;
   user-select: none;
+  line-height: 1.5;
 }
 
 .cwg-drop-zone--active {
-  border-color: #2f2f2f;
-  background: #f5f5f5;
+  border-color: var(--stay-coral);
+  background: var(--stay-coral-soft);
 }
 
 .cwg-drop-zone--active .cwg-drop-zone-label {
-  color: #2f2f2f;
+  color: var(--stay-ink-1);
   font-weight: 600;
 }
 
@@ -928,11 +904,11 @@ body.llm-game-open form {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 6px 8px;
+  padding: var(--space-3) var(--space-4);
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 /* Empty state */
@@ -944,23 +920,27 @@ body.llm-game-open form {
   line-height: 1.55;
 }
 
-/* ── Block ──────────────────────────────────────────────────────────────────── */
+/* ── Hide notes subsections that are not in the reference UI ──────────────── */
+.cwg-notes-ctx-row { display: none !important; }
+.cwg-drop-zone     { display: none !important; }
+.cwg-notes-footer  { display: none !important; }
+
+/* ── Block (rounded container + checkbox on left) ─────────────────────────── */
 
 .cwg-block {
   display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 7px 6px 7px 4px;
-  border-radius: 8px;
-  background: #ffffff;
-  border: 1px solid #e8e8ec;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--stay-bg);
+  border: 1px solid var(--stay-stroke);
   position: relative;
-  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .cwg-block:hover {
-  border-color: #c4c4cc;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  border-color: var(--stay-stroke-bold);
 }
 
 .cwg-block--dragging {
@@ -980,31 +960,42 @@ body.llm-game-open form {
 }
 
 
-/* Type badge — hidden for plain text blocks */
-.cwg-block-badge {
+/* Type badge — minimised per reference (keep hidden for the minimal UI) */
+.cwg-block-badge { display: none !important; }
+
+/* Selection checkbox — visible at all times, on the left of each block. */
+.cwg-block-select {
   flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 700;
-  color: #ffffff;
-  background: #a1a1aa;
-  border-radius: 4px;
+  appearance: none;
+  -webkit-appearance: none;
   width: 18px;
   height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 2px;
-  letter-spacing: 0;
-  line-height: 1;
+  margin: 0;
+  border: 1.5px solid var(--stay-stroke-bold);
+  border-radius: var(--radius-sm);
+  background: var(--stay-bg);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  transition: background 0.12s ease, border-color 0.12s ease;
 }
 
-.cwg-block--text .cwg-block-badge    { display: none; }
-.cwg-block--quote .cwg-block-badge   { background: #2f2f2f; }
-.cwg-block--heading .cwg-block-badge { background: #1d4ed8; }
-.cwg-block--image .cwg-block-badge   { background: #059669; }
-.cwg-block--link .cwg-block-badge    { background: #d97706; }
-.cwg-block--video .cwg-block-badge   { background: #dc2626; }
-.cwg-block--reference .cwg-block-badge { background: #6b7280; }
+.cwg-block-select:hover { border-color: var(--stay-ink-3); }
+
+.cwg-block-select:checked {
+  background: var(--stay-coral);
+  border-color: var(--stay-coral);
+}
+
+/* Hugeicons-style checkmark drawn in CSS, stroke: currentColor */
+.cwg-block-select:checked::before {
+  content: '';
+  width: 10px;
+  height: 6px;
+  border-left: 1.6px solid var(--stay-ink-1);
+  border-bottom: 1.6px solid var(--stay-ink-1);
+  transform: rotate(-45deg) translate(1px, -1px);
+}
 
 /* Block main area */
 .cwg-block-main {
@@ -1015,7 +1006,7 @@ body.llm-game-open form {
   gap: 3px;
 }
 
-/* Delete button */
+/* Delete button — only visible on hover, subtle. */
 .cwg-block-delete {
   flex-shrink: 0;
   opacity: 0;
@@ -1023,39 +1014,37 @@ body.llm-game-open form {
   height: 20px;
   border: none;
   background: transparent;
-  color: #a1a1aa;
+  color: var(--stay-ink-4);
   font-size: 15px;
   line-height: 1;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  transition: opacity 0.1s ease, background 0.1s ease, color 0.1s ease;
-  margin-top: 2px;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
 
-.cwg-block:hover .cwg-block-delete {
-  opacity: 1;
-}
+.cwg-block:hover .cwg-block-delete { opacity: 1; }
 
 .cwg-block-delete:hover {
-  background: #fee2e2;
-  color: #dc2626;
+  background: var(--stay-coral-tint);
+  color: var(--stay-coral-press);
 }
 
 /* Contenteditable text block */
 .cwg-block-content {
-  font-size: 13px;
+  font-family: var(--stay-font);
+  font-size: var(--fs-lg);
   line-height: 1.5;
-  color: #27272a;
+  color: var(--stay-ink-1);
   min-height: 20px;
   outline: none;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
-  caret-color: #2f2f2f;
+  caret-color: var(--stay-coral);
 }
 
 .cwg-block-content:empty::before {
@@ -1238,23 +1227,21 @@ body.llm-game-open form {
 
 .cwg-add-block-btn {
   width: 100%;
-  padding: 7px 12px;
-  border: 1px dashed #c4c4cc;
-  border-radius: 999px;
-  background: transparent;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: inherit;
-  color: #71717a;
+  padding: 12px 16px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--stay-coral);
+  /* WCAG AAA: ink on coral ~7.3:1; white on coral fails AA. */
+  color: var(--stay-ink-1);
+  font-size: var(--fs-md);
+  font-weight: 400;            /* regular per spec — no bold/medium */
+  font-family: var(--stay-font);
   cursor: pointer;
   transition: background 0.13s ease, border-color 0.13s ease, color 0.13s ease;
 }
 
-.cwg-add-block-btn:hover {
-  background: #ebebee;
-  border-color: #a1a1aa;
-  color: #3f3f46;
-}
+.cwg-add-block-btn:hover  { background: var(--stay-coral-hover); color: var(--stay-ink-1); }
+.cwg-add-block-btn:active { background: var(--stay-coral-press); color: var(--stay-ink-1); transform: scale(0.99); }
 
 /* ── Action bar (Copy All + Share) ─────────────────────────────────────────── */
 
@@ -1266,14 +1253,15 @@ body.llm-game-open form {
 
 .cwg-action-btn {
   flex: 1;
-  padding: 7px 10px;
-  border: 1px solid #d9d9de;
-  border-radius: 999px;
-  background: #ffffff;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: inherit;
-  color: #52525b;
+  padding: 10px 16px;
+  /* Secondary button: defined light-gray stroke per design spec. */
+  border: 1.5px solid var(--stay-line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--stay-bg);
+  color: var(--stay-ink-1);
+  font-size: var(--fs-md);
+  font-weight: 400;            /* regular per spec — no bold/medium */
+  font-family: var(--stay-font);
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.13s ease, color 0.13s ease, border-color 0.13s ease;
@@ -1284,9 +1272,9 @@ body.llm-game-open form {
 }
 
 .cwg-action-btn:hover {
-  background: #f0f0f3;
-  border-color: #c4c4cc;
-  color: #27272a;
+  background: var(--stay-bg-muted);
+  border-color: #b9b9c0;
+  color: var(--stay-ink-1);
 }
 
 .cwg-action-btn:active {
@@ -1294,15 +1282,22 @@ body.llm-game-open form {
 }
 
 .cwg-action-btn--primary {
-  background: #2f2f2f;
-  border-color: #2f2f2f;
-  color: #ffffff;
+  background: var(--stay-coral);
+  border-color: var(--stay-coral);
+  /* WCAG AAA: ink on coral ~7.3:1 */
+  color: var(--stay-ink-1);
 }
 
 .cwg-action-btn--primary:hover {
-  background: #1f1f1f;
-  border-color: #1f1f1f;
-  color: #ffffff;
+  background: var(--stay-coral-hover);
+  border-color: var(--stay-coral-hover);
+  color: var(--stay-ink-1);
+}
+
+.cwg-action-btn--primary:active {
+  background: var(--stay-coral-press);
+  border-color: var(--stay-coral-press);
+  color: var(--stay-ink-1);
 }
 
 .cwg-chevron {
@@ -1487,9 +1482,9 @@ body.llm-game-open form {
 .cwg-draw-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 6px 8px;
-  background: #ffffff;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--stay-bg);
   border-bottom: 1px solid #e8e8ec;
   flex-shrink: 0;
 }
@@ -1497,36 +1492,230 @@ body.llm-game-open form {
 .cwg-draw-toolbar-row {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--space-2);
   flex-wrap: nowrap;
 }
 
-/* Compact pill buttons */
+/* Hugeicons-style tool buttons — round chip, 1px light stroke.
+ * Active = coral tint with a coral border; icon ink turns coral. */
 .cwg-draw-tool-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 26px;
-  min-width: 26px;
-  padding: 0 6px;
-  border-radius: 999px;
-  border: 1.5px solid #e0e0e0;
-  background: #fafafa;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--stay-stroke);
+  background: var(--stay-bg);
+  color: var(--stay-ink-1);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: inherit;
   flex-shrink: 0;
-  white-space: nowrap;
   line-height: 1;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
-.cwg-draw-tool-btn:hover { background: #f0f0f0; border-color: #bbb; }
+.cwg-draw-tool-btn svg { width: var(--icon-md); height: var(--icon-md); display: block; }
+.cwg-draw-tool-btn:hover {
+  background: var(--stay-bg-muted);
+  border-color: var(--stay-stroke-bold);
+}
 .cwg-draw-tool-btn.cwg-draw-tool-btn--active {
-  background: #2f2f2f;
-  border-color: #2f2f2f;
-  color: #fff;
+  background: var(--stay-coral-soft);
+  border-color: var(--stay-coral);
+  color: var(--stay-coral-press);
 }
+
+/* Shape dropdown — anchored under the shape button; lets the user swap
+ * between rect / circle / triangle / line without leaving the toolbar.    */
+.cwg-shape-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.cwg-shape-popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  flex-direction: row;
+  gap: 4px;
+  padding: 4px;
+  background: #ffffff;
+  border: 1px solid var(--stay-stroke);
+  border-radius: 10px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.10), 0 2px 6px rgba(0, 0, 0, 0.06);
+  z-index: 20;
+  white-space: nowrap;
+}
+.cwg-shape-popup.cwg-shape-popup--open { display: inline-flex; }
+.cwg-shape-popup .cwg-draw-tool-btn { width: 28px; height: 28px; }
+
+/* Clear — small pill text button (hugeicons family still; text label per reference). */
+.cwg-draw-clear-btn {
+  margin-left: auto;
+  padding: 0 var(--space-4);
+  height: 30px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--stay-stroke);
+  background: var(--stay-bg);
+  color: var(--stay-ink-1);
+  font-family: var(--stay-font);
+  font-size: var(--fs-md);
+  font-weight: 400;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.cwg-draw-clear-btn:hover {
+  background: var(--stay-bg-muted);
+  border-color: var(--stay-stroke-bold);
+}
+
+/* "Select artwork" — secondary CTA pill in the toolbar. Appears only after
+ * the user has drawn anything; clicking enters crosshair selection mode and
+ * the bottom "Send to chat" CTA appears once the drag completes.
+ * When visible, it claims the right-aligned margin from Clear, which then
+ * sits directly after it. */
+.cwg-draw-copy-btn {
+  margin-left: auto;
+  padding: 0 var(--space-4);
+  height: 30px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--stay-coral);
+  background: var(--stay-coral);
+  color: var(--stay-ink-1);   /* WCAG AAA: 7.3:1 on coral */
+  font-family: var(--stay-font);
+  font-size: var(--fs-md);
+  font-weight: 400;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.cwg-draw-copy-btn:hover {
+  background: var(--stay-coral-hover);
+  border-color: var(--stay-coral-hover);
+}
+.cwg-draw-copy-btn--hidden { display: none !important; }
+
+/* Active = currently in selection mode. Flip to a neutral "Cancel" look so
+ * the coral CTA doesn't imply the primary action is still available. */
+.cwg-draw-copy-btn--active {
+  background: var(--stay-bg);
+  border-color: var(--stay-stroke);
+  color: var(--stay-ink-1);
+  font-weight: 500;
+}
+.cwg-draw-copy-btn--active:hover {
+  background: var(--stay-bg-muted);
+  border-color: var(--stay-stroke-bold);
+}
+
+/* When Copy is visible it takes the auto-margin; Clear follows it with a
+ * regular gap instead of right-aligning on its own. */
+.cwg-draw-copy-btn:not(.cwg-draw-copy-btn--hidden) ~ .cwg-draw-clear-btn {
+  margin-left: var(--space-2);
+}
+
+/* ── Persistent panel footer — tab-specific action bar ──────────────────────
+ * Mirrors the toolbar at the top: a fixed-height row at the bottom of the
+ * side panel that hosts each tab's CTAs. The notes tab renders Copy + Share,
+ * the draw tab renders Select artwork + Download, the play tab hides it.
+ * The body uses `flex: 1; min-height: 0` already, so adding this row simply
+ * squeezes the notepad / canvas above it.                                    */
+.cwg-panel-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--stay-bg);
+  border-top: 1px solid var(--stay-stroke-soft);
+  flex-shrink: 0;
+}
+.cwg-panel-footer--hidden { display: none; }
+
+/* Footer CTAs share the tab pill geometry: pill-shaped, regular weight per
+ * design spec. The footer always renders as 80:20 — the primary action gets
+ * a wide pill (flex 4), the secondary action is a square-ish icon pill
+ * (flex 1) with all-equal padding for the icon to sit centred.              */
+.cwg-footer-btn {
+  flex: 4 1 0;
+  min-width: 0;
+  padding: 12px 18px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--stay-line-strong);
+  background: var(--stay-bg);
+  color: var(--stay-ink-1);
+  font-family: var(--stay-font);
+  font-size: var(--fs-md);
+  font-weight: 400;
+  cursor: pointer;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.13s ease, border-color 0.13s ease, color 0.13s ease, opacity 0.13s ease;
+}
+.cwg-footer-btn:hover {
+  background: var(--stay-bg-muted);
+  border-color: #b9b9c0;
+}
+.cwg-footer-btn:active { transform: scale(0.99); }
+.cwg-footer-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* Icon-only secondary slot — the 20% half of the 80:20 footer split. Icon
+ * is sized to ~20px, padding equalised so the pill stays compact.           */
+.cwg-footer-btn--icon {
+  flex: 1 1 0;
+  padding: 12px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.cwg-footer-btn--icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  color: var(--stay-ink-1);
+}
+
+/* Primary variant — coral fill, AAA-contrast ink. */
+.cwg-footer-btn--primary,
+.cwg-footer-btn--primary:hover {
+  background: var(--stay-coral);
+  border-color: var(--stay-coral);
+  color: var(--stay-ink-1);
+}
+.cwg-footer-btn--primary:hover  { background: var(--stay-coral-hover); border-color: var(--stay-coral-hover); }
+.cwg-footer-btn--primary:active { background: var(--stay-coral-press); border-color: var(--stay-coral-press); }
+
+/* Success state for the draw "Copy art" → "Copied — paste in chat" flash. */
+.cwg-footer-btn--success,
+.cwg-footer-btn--success:hover {
+  background: var(--stay-bg);
+  border-color: var(--stay-coral);
+  color: var(--stay-coral-press);
+}
+
+/* The Share dropdown wrapper occupies the icon (20%) slot. */
+.cwg-panel-footer .cwg-share-wrap { flex: 1 1 0; min-width: 0; position: relative; }
+.cwg-panel-footer .cwg-share-wrap > .cwg-footer-btn { width: 100%; }
+.cwg-panel-footer .cwg-share-dropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid var(--stay-stroke);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.10), 0 2px 6px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  z-index: 10;
+  display: none;
+}
+.cwg-panel-footer .cwg-share-dropdown.cwg-share-dropdown--open { display: block; }
 
 /* Relative wrapper for popup-bearing buttons */
 .cwg-draw-tool-wrap {
@@ -1608,21 +1797,22 @@ body.llm-game-open form {
   min-width: 98px;
 }
 
-/* Colour swatches */
+/* Colour swatches — circular chips, matched in size to tool buttons for alignment. */
 .cwg-draw-swatch {
-  width: 17px;
-  height: 17px;
+  width: 22px;
+  height: 22px;
+  margin: 0 2px;
   border-radius: 50%;
-  border: 2px solid transparent;
+  border: 1.5px solid transparent;
   cursor: pointer;
   flex-shrink: 0;
-  transition: transform 0.12s, border-color 0.12s;
+  box-shadow: 0 0 0 1px var(--stay-stroke);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
-.cwg-draw-swatch:hover { transform: scale(1.2); }
-.cwg-draw-swatch--white { box-shadow: inset 0 0 0 1.5px #d0d0d0; }
+.cwg-draw-swatch:hover { transform: scale(1.08); }
+.cwg-draw-swatch--white { box-shadow: 0 0 0 1px var(--stay-stroke-bold); }
 .cwg-draw-swatch.cwg-draw-swatch--active {
-  border-color: #2f2f2f;
-  transform: scale(1.2);
+  box-shadow: 0 0 0 2px var(--stay-ink-1);
 }
 
 .cwg-draw-sep {
@@ -1654,12 +1844,15 @@ body.llm-game-open form {
 .cwg-draw-export-btn.cwg-draw-export-btn--active { background: #dc2626; }
 .cwg-draw-export-btn.cwg-draw-export-btn--active:hover { background: #b91c1c; }
 
-/* Canvas area */
+/* Canvas area — dashed boundary per reference design. */
 .cwg-draw-canvas-wrap {
   flex: 1;
-  overflow: hidden;
   position: relative;
-  background: #ffffff;
+  margin: 0 var(--space-4) var(--space-4);
+  background: var(--stay-bg);
+  border: 1.5px dashed var(--stay-stroke-bold);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
 #cwg-draw-canvas {
@@ -1699,7 +1892,8 @@ body.llm-game-open form {
 }
 .cwg-draw-sel-drag:hover { background: #1a1a1a; }
 
-/* "⠿ Drag" — secondary draggable pill */
+/* "⠿ Drag" — click-to-arm pill. Click to arm the paste; moving the cursor
+   out of the side panel drops the image into the chat composer. */
 .cwg-draw-sel-copy {
   padding: 4px 12px;
   background: rgba(255,255,255,0.92);
@@ -1708,13 +1902,20 @@ body.llm-game-open form {
   font-size: 10px;
   font-weight: 600;
   font-family: system-ui, sans-serif;
-  cursor: grab;
+  cursor: pointer;
   white-space: nowrap;
   box-shadow: 0 2px 8px rgba(0,0,0,0.16);
   user-select: none;
   border: 1.5px solid #e0e0e0;
   text-align: center;
-  transition: background 0.12s;
+  transition: background 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
 }
 .cwg-draw-sel-copy:hover { background: #f0f0f0; }
-.cwg-draw-sel-copy:active { cursor: grabbing; }
+.cwg-draw-sel-copy:active { transform: translateY(0.5px); }
+.cwg-draw-sel-copy--armed {
+  background: var(--stay-coral, #ff6b5b);
+  color: var(--stay-ink-1, #18181b);
+  border-color: var(--stay-coral, #ff6b5b);
+  box-shadow: 0 0 0 3px rgba(255, 107, 91, 0.22), 0 2px 8px rgba(0,0,0,0.16);
+}
+.cwg-draw-sel-copy--armed:hover { background: var(--stay-coral, #ff6b5b); }

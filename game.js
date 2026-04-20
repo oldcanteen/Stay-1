@@ -63,16 +63,16 @@
   }
 
   function applyColorGameChrome() {
-    var panel     = document.getElementById('cwg-panel');
-    var header    = document.getElementById('cwg-panel-header');
-    var scoreline = document.getElementById('cwg-panel-scoreline');
+    var panel     = S.el('cwg-panel');
+    var header    = S.el('cwg-panel-header');
+    var scoreline = S.el('cwg-panel-scoreline');
     if (scoreline) scoreline.hidden = false;
     if (header) header.classList.add('cwg-panel-header--color');
     if (panel)  panel.classList.add('cwg-panel--art-waiting');
   }
 
   function updateColorScoreline(score, high) {
-    var el = document.getElementById('cwg-panel-scoreline');
+    var el = S.el('cwg-panel-scoreline');
     if (el) el.textContent = 'Score: ' + score + ' • High score: ' + high;
   }
 
@@ -88,8 +88,16 @@
   // ── Color game renderer ──────────────────────────────────────────────────────
 
   S.renderColorGame = function renderColorGame() {
-    var body = document.getElementById('cwg-panel-body');
+    var body = S.el('cwg-panel-body');
     body.className = 'cwg-panel-body cwg-panel-body--color';
+
+    // Play tab has no footer CTAs — hide the persistent action bar so the
+    // game has the full vertical space.
+    var footer = document.getElementById('cwg-panel-footer');
+    if (footer) {
+      footer.innerHTML = '';
+      footer.className = 'cwg-panel-footer cwg-panel-footer--hidden';
+    }
 
     var score          = 0;
     var round          = buildColorRound();
@@ -129,7 +137,7 @@
             '</svg>Replay</button>' +
             '</div></div>';
 
-          document.getElementById('cwg-cw-replay').addEventListener('click', function () {
+          S.el('cwg-cw-replay').addEventListener('click', function () {
             gameOver = false; score = 0; round = buildColorRound(); paint();
           });
           return;

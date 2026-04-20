@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Stay flower mark — same 5-petal flower used in the brand bar and the
+  edge bookmark, on a rounded-square dark gradient with a soft purple
+  accent glow. Uses standard stop-color + stop-opacity (no rgba()) so it
+  renders identically in every SVG renderer (Chrome, Safari, Firefox,
+  Figma, Finder preview).
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="128" height="128" viewBox="0 0 128 128"
+     role="img" aria-label="Stay">
+
+  <defs>
+    <linearGradient id="stayBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#484848"/>
+      <stop offset="55%"  stop-color="#2f2f2f"/>
+      <stop offset="100%" stop-color="#1a1a1a"/>
+    </linearGradient>
+
+    <radialGradient id="stayGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#8b5cf6" stop-opacity="0.55"/>
+      <stop offset="55%"  stop-color="#8b5cf6" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="0" y="0" width="128" height="128" rx="28" ry="28" fill="url(#stayBg)"/>
+
+  <circle cx="64" cy="64" r="48" fill="url(#stayGlow)"/>
+
+  <!-- 5-petal flower, scaled up from the original 24x24 art (×16/3 ? 5.33). -->
+  <g fill="#ffffff">
+    <ellipse cx="64" cy="37.3" rx="17" ry="26.7" transform="rotate(0 64 64)"/>
+    <ellipse cx="64" cy="37.3" rx="17" ry="26.7" transform="rotate(72 64 64)"/>
+    <ellipse cx="64" cy="37.3" rx="17" ry="26.7" transform="rotate(144 64 64)"/>
+    <ellipse cx="64" cy="37.3" rx="17" ry="26.7" transform="rotate(216 64 64)"/>
+    <ellipse cx="64" cy="37.3" rx="17" ry="26.7" transform="rotate(288 64 64)"/>
+    <circle cx="64" cy="64" r="12.8" fill="#ffffff" fill-opacity="0.92"/>
+  </g>
+</svg>

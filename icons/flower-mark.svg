@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Bare 5-petal flower mark on transparent background.
+  Same geometry as the inline SVG used in content.js / sidepanel.html.
+  Scale freely by setting width/height on <img> or <use>.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="24" height="24" viewBox="0 0 24 24"
+     role="img" aria-label="Stay">
+  <g fill="#ffffff">
+    <ellipse cx="12" cy="7" rx="3.2" ry="5" transform="rotate(0 12 12)"/>
+    <ellipse cx="12" cy="7" rx="3.2" ry="5" transform="rotate(72 12 12)"/>
+    <ellipse cx="12" cy="7" rx="3.2" ry="5" transform="rotate(144 12 12)"/>
+    <ellipse cx="12" cy="7" rx="3.2" ry="5" transform="rotate(216 12 12)"/>
+    <ellipse cx="12" cy="7" rx="3.2" ry="5" transform="rotate(288 12 12)"/>
+    <circle cx="12" cy="12" r="2.4" fill="#ffffff" fill-opacity="0.9"/>
+  </g>
+</svg>

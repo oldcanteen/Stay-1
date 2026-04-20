@@ -236,7 +236,8 @@
     el.addEventListener('dragend', function () {
       S.cwgInternalDrag = false;
       el.classList.remove('cwg-block--dragging');
-      document.querySelectorAll('.cwg-block--drag-over').forEach(function (n) { n.classList.remove('cwg-block--drag-over'); });
+      var _list = S.el('cwg-block-list');
+      if (_list) _list.querySelectorAll('.cwg-block--drag-over').forEach(function (n) { n.classList.remove('cwg-block--drag-over'); });
     });
 
     // Allow external drags INTO an existing text block
@@ -296,19 +297,34 @@
   /**
    * Wire a contenteditable element.
    * newBlockTemplate — if set, block is not yet persisted; save on first non-empty keystroke.
+   *
+   * Persistence is queued so that a fast Enter immediately following the
+   * first keystroke can never race the in-flight `spAddBlock`. Without this
+   * serialization the placeholder save and the `spInsertBlockAfter` for the
+   * new block both load the scratchpad concurrently, the second write wins,
+   * and the typed text silently disappears from the rendered list.
    */
   function wireContentEditable(el, chatId, blockId, field, newBlockTemplate) {
     var persisted = !newBlockTemplate;
+    var persistInFlight = false;
+    var persistWaiters  = [];
 
     function ensurePersisted(cb) {
-      if (persisted) { cb(); return; }
+      if (persisted && !persistInFlight) { if (cb) cb(); return; }
+      if (persistInFlight) { if (cb) persistWaiters.push(cb); return; }
+      persistInFlight = true;
       persisted = true;
       var blockToSave = {};
       for (var k in newBlockTemplate) {
         if (k !== '_placeholder') blockToSave[k] = newBlockTemplate[k];
       }
       blockToSave.content = el.innerHTML;
-      spAddBlock(chatId, blockToSave, cb);
+      if (cb) persistWaiters.push(cb);
+      spAddBlock(chatId, blockToSave, function () {
+        persistInFlight = false;
+        var queued = persistWaiters; persistWaiters = [];
+        queued.forEach(function (fn) { try { fn(); } catch (_) {} });
+      });
     }
 
     el.addEventListener('keydown', function (e) {
@@ -325,7 +341,8 @@
         ensurePersisted(function () {
           spInsertBlockAfter(chatId, blockId, nextBlock, function () {
             S.renderNotesTab(function () {
-              var newEl = document.querySelector('[data-block-id="' + nextBlock.id + '"] .cwg-block-content');
+              var lr = S.el('cwg-block-list');
+              var newEl = lr && lr.querySelector('[data-block-id="' + nextBlock.id + '"] .cwg-block-content');
               if (newEl) newEl.focus();
             });
           });
@@ -350,15 +367,9 @@
     el.addEventListener('input', function () {
       var val = el.innerHTML;
       var plainVal = el.innerText;
-      if (!persisted) {
+      if (!persisted || persistInFlight) {
         if (!plainVal.trim()) return;
-        persisted = true;
-        var blockToSave = {};
-        for (var k in newBlockTemplate) {
-          if (k !== '_placeholder') blockToSave[k] = newBlockTemplate[k];
-        }
-        blockToSave.content = val;
-        spAddBlock(chatId, blockToSave, null);
+        ensurePersisted(null);
         return;
       }
       var key = blockId + '_' + field;
@@ -411,7 +422,7 @@
   function updateNoteCountLabel(chatId) {
     loadScratchpad(function (data) {
       var count = (data.chats[chatId] || []).length;
-      var ctx = document.getElementById('cwg-notes-ctx');
+      var ctx = S.el('cwg-notes-ctx');
       if (ctx) {
         var platformLabel = { chatgpt: 'ChatGPT', gemini: 'Gemini', claude: 'Claude' }[S.PLATFORM] || S.PLATFORM;
         ctx.textContent = platformLabel + ' · ' + chatId + ' · ' + count + ' block' + (count === 1 ? '' : 's');
@@ -422,15 +433,15 @@
   // ── Notes tab renderer ───────────────────────────────────────────────────────
 
   S.renderNotesTab = function renderNotesTab(afterCb) {
-    var body = document.getElementById('cwg-panel-body');
+    var body = S.el('cwg-panel-body');
     var chatId = S.getCurrentChatId();
 
     // Clear game header chrome
-    var header = document.getElementById('cwg-panel-header');
-    var panel  = document.getElementById('cwg-panel');
+    var header = S.el('cwg-panel-header');
+    var panel  = S.el('cwg-panel');
     if (header) header.classList.remove('cwg-panel-header--color');
     if (panel)  panel.classList.remove('cwg-panel--art-waiting');
-    var scoreline = document.getElementById('cwg-panel-scoreline');
+    var scoreline = S.el('cwg-panel-scoreline');
     if (scoreline) scoreline.hidden = true;
 
     body.className = 'cwg-panel-body cwg-panel-body--notes';
@@ -445,28 +456,42 @@
         platformLabel + ' · ' + chatId + ' · ' + blocks.length + ' block' + (blocks.length === 1 ? '' : 's') +
         '</span></div>' +
         '<div class="cwg-block-list" id="cwg-block-list"></div>' +
-        // Persistent drop target at the bottom
+        // Persistent drop target at the bottom of the scrolling area.
         '<div class="cwg-drop-zone" id="cwg-drop-zone">' +
         '<span class="cwg-drop-zone-label" id="cwg-drop-hint">Drag here to add a note</span>' +
         '</div>' +
-        '<div class="cwg-notes-footer">' +
-        '<button type="button" class="cwg-add-block-btn" id="cwg-add-block-btn">+ Add note</button>' +
-        // Selection actions — all hidden until a checkbox is ticked
-        '<div class="cwg-sel-actions" id="cwg-sel-actions">' +
-        '<button type="button" class="cwg-sel-action-btn" id="cwg-copy-selected">Copy</button>' +
-        '<button type="button" class="cwg-sel-action-btn cwg-sel-action-btn--danger" id="cwg-delete-selected">Delete</button>' +
-        '<button type="button" class="cwg-sel-action-btn" id="cwg-clear-selected">Clear text</button>' +
-        '</div>' +
-        '<div class="cwg-action-bar">' +
-        '<div class="cwg-share-wrap">' +
-        '<button type="button" class="cwg-action-btn" id="cwg-share-btn">Share <span class="cwg-chevron">▾</span></button>' +
-        '<div class="cwg-share-dropdown" id="cwg-share-dropdown">' +
-        '<button type="button" class="cwg-share-item" id="cwg-share-doc">↓ Download as Doc</button>' +
-        '<button type="button" class="cwg-share-item" id="cwg-share-pdf">↓ Download as PDF</button>' +
-        '<button type="button" class="cwg-share-item" id="cwg-share-notion">↗ Open in Notion</button>' +
-        '</div></div></div></div></div>';
+        '</div>';
 
-      var listEl = document.getElementById('cwg-block-list');
+      // ── Persistent footer action bar (Copy + Share) ──────────────────────
+      // Lives outside the scrolling notes body in #cwg-panel-footer so it
+      // mirrors the toolbar at the top and squeezes the notepad above it.
+      // 80:20 split — wide primary "Copy" pill on the left, icon-only
+      // "Share" button on the right (dropdown opens upward).
+      var IC_SHARE =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"' +
+        ' stroke-linecap="round" stroke-linejoin="round">' +
+        '<circle cx="6"  cy="12" r="2.4"/>' +
+        '<circle cx="18" cy="6"  r="2.4"/>' +
+        '<circle cx="18" cy="18" r="2.4"/>' +
+        '<path d="M8 11l8-4"/>' +
+        '<path d="M8 13l8 4"/></svg>';
+
+      var footerEl = document.getElementById('cwg-panel-footer');
+      footerEl.className = 'cwg-panel-footer';
+      footerEl.innerHTML =
+        '<button type="button" class="cwg-footer-btn cwg-footer-btn--primary" id="cwg-copy-btn">Copy</button>' +
+        '<div class="cwg-share-wrap">' +
+        '<button type="button" class="cwg-footer-btn cwg-footer-btn--icon" id="cwg-share-btn"' +
+        ' title="Share notes" aria-label="Share notes" aria-haspopup="true" aria-expanded="false">' +
+        IC_SHARE +
+        '</button>' +
+        '<div class="cwg-share-dropdown" id="cwg-share-dropdown">' +
+        '<button type="button" class="cwg-share-item" id="cwg-share-notion">↗ Share to Notion</button>' +
+        '<button type="button" class="cwg-share-item" id="cwg-share-doc">↓ Share to Docs</button>' +
+        '<button type="button" class="cwg-share-item" id="cwg-share-pdf">↓ Download PDF</button>' +
+        '</div></div>';
+
+      var listEl = S.el('cwg-block-list');
 
       if (blocks.length === 0) {
         var placeholderBlock = {
@@ -482,99 +507,82 @@
         blocks.forEach(function (block) { listEl.appendChild(renderBlock(block, chatId)); });
       }
 
-      // Selection checkboxes → show/hide selection action bar
-      var selActions  = document.getElementById('cwg-sel-actions');
-      var copySelBtn  = document.getElementById('cwg-copy-selected');
-      var deleteSelBtn = document.getElementById('cwg-delete-selected');
-      var clearSelBtn  = document.getElementById('cwg-clear-selected');
+      // ── Bottom action bar ────────────────────────────────────────────────
+      // The Copy CTA is selection-aware:
+      //   • If the user has a non-empty text selection (anywhere in the
+      //     panel) → copy that string verbatim.
+      //   • Otherwise → copy the entire notepad as markdown.
+      // The selection has to be captured on `mousedown`, because clicking
+      // the button itself can collapse the selection on some browsers.
+      var copyBtn  = S.el('cwg-copy-btn');
+      var shareBtn = S.el('cwg-share-btn');
+      var shareDd  = S.el('cwg-share-dropdown');
 
-      function getCheckedBlocks() {
+      var capturedSelection = '';
+      copyBtn.addEventListener('mousedown', function () {
+        var sel = (window.getSelection() || {}).toString();
+        capturedSelection = (sel && sel.trim()) ? sel : '';
+      });
+
+      function flashCopyResult(ok) {
+        copyBtn.textContent = ok ? '✓ Copied' : 'Copy failed';
+        setTimeout(function () { copyBtn.textContent = 'Copy'; }, 1500);
+      }
+
+      function checkedBlocks() {
         return blocks.filter(function (b) {
           var chk = listEl.querySelector('[data-block-id="' + b.id + '"] .cwg-block-select');
           return chk && chk.checked;
         });
       }
 
-      function refreshSelActions() {
-        var any = !!listEl.querySelector('.cwg-block-select:checked');
-        selActions.classList.toggle('cwg-sel-actions--visible', any);
-      }
-
-      listEl.addEventListener('change', function (e) {
-        if (e.target && e.target.classList.contains('cwg-block-select')) refreshSelActions();
-      });
-
-      // Copy selected
-      copySelBtn.addEventListener('click', function () {
-        var md = exportAsMarkdown(getCheckedBlocks());
+      copyBtn.addEventListener('click', function () {
+        var liveSel = (window.getSelection() || {}).toString().trim();
+        var sel = liveSel || capturedSelection;
+        var text;
+        if (sel) {
+          text = sel;
+        } else {
+          var picked = checkedBlocks();
+          text = picked.length ? exportAsMarkdown(picked) : exportAsMarkdown(blocks);
+        }
+        capturedSelection = '';
         try {
-          navigator.clipboard.writeText(md).then(function () {
-            copySelBtn.textContent = '✓ Copied';
-            setTimeout(function () { copySelBtn.textContent = 'Copy'; }, 1500);
-          }).catch(function () { fallbackCopyText(md); });
-        } catch (e) { fallbackCopyText(md); }
-      });
-
-      // Delete selected
-      deleteSelBtn.addEventListener('click', function () {
-        var toDelete = getCheckedBlocks();
-        var ids = toDelete.map(function (b) { return b.id; });
-        var pending = ids.length;
-        if (!pending) return;
-        ids.forEach(function (id) {
-          spDeleteBlock(chatId, id, function () {
-            var row = listEl.querySelector('[data-block-id="' + id + '"]');
-            if (row) row.remove();
-            pending--;
-            if (pending <= 0) {
-              blocks = blocks.filter(function (b) { return ids.indexOf(b.id) === -1; });
-              updateNoteCountLabel(chatId);
-              refreshSelActions();
-            }
-          });
-        });
-      });
-
-      // Clear text of selected blocks
-      clearSelBtn.addEventListener('click', function () {
-        getCheckedBlocks().forEach(function (b) {
-          if (b.type !== 'text' && b.type !== 'quote' && b.type !== 'heading' && b.type !== 'reference') return;
-          var ce = listEl.querySelector('[data-block-id="' + b.id + '"] .cwg-block-content');
-          if (ce) { ce.innerHTML = ''; ce.innerText = ''; }
-          spUpdateBlock(chatId, b.id, { content: '' }, function () {});
-          b.content = '';
-        });
-      });
-
-      // Add note button
-      document.getElementById('cwg-add-block-btn').addEventListener('click', function () {
-        var newBlock = { id: makeBlockId(), type: 'text', content: '', src: null, caption: '', prompt: S.lastSentPromptText, timestamp: Date.now() };
-        spAddBlock(chatId, newBlock, function () {
-          S.renderNotesTab(function () {
-            var newEl = document.querySelector('[data-block-id="' + newBlock.id + '"] .cwg-block-content');
-            if (newEl) newEl.focus();
-          });
-        });
+          navigator.clipboard.writeText(text)
+            .then(function () { flashCopyResult(true); })
+            .catch(function () { fallbackCopyText(text); flashCopyResult(true); });
+        } catch (e) { fallbackCopyText(text); flashCopyResult(true); }
       });
 
       // Share dropdown toggle
-      var shareBtn = document.getElementById('cwg-share-btn');
-      var shareDd  = document.getElementById('cwg-share-dropdown');
       shareBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         var open = shareDd.classList.toggle('cwg-share-dropdown--open');
+        shareBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
         if (open) {
           setTimeout(function () {
             document.addEventListener('click', function closeDd() {
               shareDd.classList.remove('cwg-share-dropdown--open');
+              shareBtn.setAttribute('aria-expanded', 'false');
               document.removeEventListener('click', closeDd);
             });
           }, 0);
         }
       });
 
-      // Download as Doc
-      document.getElementById('cwg-share-doc').addEventListener('click', function () {
+      // Share to Notion — copies markdown then opens a fresh Notion page.
+      S.el('cwg-share-notion').addEventListener('click', function () {
+        shareDd.classList.remove('cwg-share-dropdown--open');
+        var md = exportAsMarkdown(blocks);
+        try {
+          navigator.clipboard.writeText(md).then(function () {
+            window.open('https://www.notion.so/new', '_blank');
+          }).catch(function () { fallbackCopyText(md); window.open('https://www.notion.so/new', '_blank'); });
+        } catch (e) { fallbackCopyText(md); window.open('https://www.notion.so/new', '_blank'); }
+      });
+
+      // Share to Docs — downloads a .doc file (opens with Google Docs / Word)
+      S.el('cwg-share-doc').addEventListener('click', function () {
         shareDd.classList.remove('cwg-share-dropdown--open');
         var md = exportAsMarkdown(blocks);
         var html = '<html><head><meta charset="utf-8"><title>Stay Notes</title></head><body><pre style="font-family:system-ui;max-width:720px;margin:40px auto;white-space:pre-wrap">' +
@@ -585,8 +593,8 @@
         setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
       });
 
-      // Download as PDF
-      document.getElementById('cwg-share-pdf').addEventListener('click', function () {
+      // Download PDF — opens a print-ready window targeted at "Save as PDF"
+      S.el('cwg-share-pdf').addEventListener('click', function () {
         shareDd.classList.remove('cwg-share-dropdown--open');
         var md  = exportAsMarkdown(blocks);
         var win = window.open('', '_blank');
@@ -596,17 +604,6 @@
           win.document.close(); win.focus();
           setTimeout(function () { win.print(); }, 300);
         }
-      });
-
-      // Open in Notion
-      document.getElementById('cwg-share-notion').addEventListener('click', function () {
-        shareDd.classList.remove('cwg-share-dropdown--open');
-        var md = exportAsMarkdown(blocks);
-        try {
-          navigator.clipboard.writeText(md).then(function () {
-            window.open('https://www.notion.so/new', '_blank');
-          }).catch(function () { fallbackCopyText(md); window.open('https://www.notion.so/new', '_blank'); });
-        } catch (e) { fallbackCopyText(md); window.open('https://www.notion.so/new', '_blank'); }
       });
 
       // Block list drag-to-reorder
@@ -660,7 +657,7 @@
       if (S.cwgInternalDrag || S.activeTab !== 'notes') return;
       e.preventDefault(); dragCount++;
       panelBody.classList.add('cwg-drop-active');
-      var dz = document.getElementById('cwg-drop-zone');
+      var dz = S.el('cwg-drop-zone');
       if (dz) dz.classList.add('cwg-drop-zone--active');
     });
     panelBody.addEventListener('dragover', function (e) {
@@ -673,7 +670,7 @@
       if (dragCount <= 0) {
         dragCount = 0;
         panelBody.classList.remove('cwg-drop-active');
-        var dz = document.getElementById('cwg-drop-zone');
+        var dz = S.el('cwg-drop-zone');
         if (dz) dz.classList.remove('cwg-drop-zone--active');
       }
     });
@@ -685,7 +682,7 @@
       // that handler already called stopPropagation — we won't see it here.
       e.preventDefault(); dragCount = 0;
       panelBody.classList.remove('cwg-drop-active');
-      var dz = document.getElementById('cwg-drop-zone');
+      var dz = S.el('cwg-drop-zone');
       if (dz) dz.classList.remove('cwg-drop-zone--active');
 
       var detected = detectDragType(e.dataTransfer);
